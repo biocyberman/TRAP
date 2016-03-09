@@ -137,7 +137,7 @@ def main() :
 				pnamePath = val
 			elif (key=="kgmlPath") :
 				kgmlPath = val
-			elif (key=="cuffdiff") :
+			elif (key=="useCuffdiff") :
 				cuffdiff = val
 			elif (key=="pVal") :
 				pCut = float(val)
@@ -147,6 +147,12 @@ def main() :
 				DEGCut = float(val)
 			elif (key=="clusterCut") :
 				clusterCut = float(val)
+                        elif (key=="geneSymColNum") :
+				geneSymColNum = int(val)
+			elif (key=="pvalColNum") :
+				pvalColNum = int(val)
+                        elif (key=="fcColNum") :
+				fcColNum = int(val)
 			elif (key=="timeLag") :
 				timeLag = float(val)
 			else :
@@ -208,9 +214,9 @@ def main() :
                                 if l.startswith('#'):
                                         continue
                                 tp = l.split()
-				if not is_number(tp[9]) :
+				if not is_number(tp[fcColNum]) :
 					continue
-                                geneSum.add(tp[2])
+                                geneSum.add(tp[geneSymColNum])
                         pfile.close()
 		for gene in geneSum :
 			fcList[gene]=[]
@@ -224,13 +230,13 @@ def main() :
                                         continue
 
                                 tp = l.split()
-				if not is_number(tp[9]) :
+				if not is_number(tp[fcColNum]) :
 					continue
-				if ( tp[9]=='inf' or tp[9] == '-inf') :
-					temp[tp[2]]=0
+				if ( tp[fcColNum]=='inf' or tp[fcColNum] == '-inf') :
+					temp[tp[geneSymColNum]]=0
 				else: 
-	                                temp[tp[2]]=float(tp[9])
-                                temp2[tp[2]]=float(tp[12])
+	                                temp[tp[geneSymColNum]]=float(tp[fcColNum])
+                                temp2[tp[geneSymColNum]]=float(tp[pvalColNum])
 
                         for gene in geneSum :
                                 if gene in temp :

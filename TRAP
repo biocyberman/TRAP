@@ -23,12 +23,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 '
 
 CONF_FILE="config.txt"
-cuff=0
-tophat=0
 
 # Read config file and assign values
 
-for i in `cat $CONF_FILE | grep '^[^#].*'`
+for i in $(cat $CONF_FILE | \grep -v '#')
 do
    var=`echo "$i" | awk -F"=" '{print $1}'`
    param=`echo "$i" | awk -F"=" '{print $2}'`
@@ -45,120 +43,150 @@ top=0
 while [ "$cuffdiff" == "yes" ]; do
     read -p "Do you have Cuffdiff results? (y/n) : " yn
     case $yn in
-        [Yy]* ) cuffd=1; break;;
-        [Nn]* ) cuffd=0; break;;
+        [Yy]* ) runcuffd=0; break;;
+        [Nn]* ) runcuffd=1; break;;
         * ) echo "Please answer y or n";;
     esac
 done
-while [ "$cuffdiff" == "no" ]; do
+while [ "$runcuffd" == 1 ]; do
     read -p "Do you have Cufflinks results? (y/n) : " yn
     case $yn in
-        [Yy]* ) cuff=1; break;;
-        [Nn]* ) cuff=0; break;;
+        [Yy]* ) runcufflinks=0; break;;
+        [Nn]* ) runcufflinks=1; break;;
         * ) echo "Please answer y or n";;
     esac
 done
-while [ "$cuff" == 0 ]; do
+while [ "$runcufflinks" == 1 ]; do
     read -p "Do you have Tophat results? (y/n) : " yn
     case $yn in
-        [Yy]* ) top=1; break;;
-        [Nn]* ) top=0; break;;
+        [Yy]* ) runtophat=0; break;;
+        [Nn]* ) runtophat=1; break;;
         * ) echo "Please answer y or n";;
     esac
 done
 
 current=`pwd`
 
-if [ "$top" == 0 ]; then
-echo $'\n'
-echo "### Tophat : Mapping reads to reference genome ###"
-echo "Log will be written in tophat_result/SAMPLE/logs directory"
+#================ FUNCTIONS ====================================
+function runtophat(){
+        runcmd=''
+	elem=$1 # name of the sample
+	fqfiles="$2" # fastq files in coma-separated list
+	threads=${3:-8} # number of threads to run tophat
+	outdir=${current}/tophat_result/${elem} 
+        if [ "$rsume" == 1 -a -d $outdir ]; then
+      		echo "Resuming Tophat for mapping ${elem}"
+		runcmd="tophat -R $outdir"
+	else
 
-for i in $(eval echo "{1..$numTP}")
-do
-   eval con='$control'$i
-   IFS=',' array=($con)
-   for elem in "${array[@]}"
-   do
-      eval con2='$'$elem'Path'
-      echo $'\n'
-      echo "Start Tophat for mapping ${elem}"
-      re=' '
-      echo "${tophatPath}tophat -o tophat_result/${elem} -G $gffPath $refIndex ${con2//,/$re}"; eval "${tophatPath}tophat -o ${current}/tophat_result/${elem} -G $gffPath $refIndex ${con2//,/$re};"
-      echo $'\n'
-   done
+      		echo "Start Tophat for mapping ${elem}"
+ 	       runcmd="${tophatPath}tophat  --no-novel-juncs -p $threads -z0 -o $outdir -G $gffPath --rg-id $elem --rg-sample $elem --rg-platform 'Proton Data' --rg-center 'AfMD' $refIndex $fqfiles;"
+	fi
+	echo $runcmd
+	eval $runcmd
+}
 
-  eval tre='$treatment'$i
-   IFS=',' array=($tre)
-   for elem in "${array[@]}"
-   do
-      eval tre2='$'$elem'Path'
-      echo $'\n'
-      echo "Start Tophat for mapping ${elem}"
-      echo "${tophatPath}tophat -o tophat_result/${elem} -G $gffPath $refIndex ${tre2//,/$re}"; eval "${tophatPath}tophat -o ${current}/tophat_result/${elem} -G $gffPath $refIndex ${tre2//,/$re}"
-      echo $'\n'
-   done
-done
+function runcufflinks(){
+        echo "Start Cufflinks for ${elem}"
+        runcmd=''
+	elem=$1 # name of the sample
+	threads=${2:-26} # number of threads to run tophat
+	outdir=${current}/cufflinks_result/${elem} 
+	mkdir -p $outdir
+        runcmd="${cuffPath}cufflinks -p $threads -o $outdir -G $gffPath ${current}/tophat_result/${elem}/accepted_hits.bam 2>&1 | tee ${current}/cufflinks_result/${elem}/log.txt"
+ 	echo $runcmd
+	eval $runcmd
+}
+#================ /FUNCTIONS ===================================
+
+declare -A sampleArray # associative array keeps samples name and paths of data files
+
+if [ "$runtophat" == 1 ]; then
+    echo $'\n'
+
+    rsume=0
+    while [ "$rsume" == 0 ]; do
+	read -p "Do you want to resume incomplete run? (y/n) : " yn
+	case $yn in
+	    [Yy]* ) rsume=1; break;;
+	    [Nn]* ) rsume=0; break;;
+	    * ) echo "Please answer y or n";;
+	esac
+    done
+
+
+    echo "### Tophat : Mapping reads to reference genome ###"
+    echo "Log will be written in tophat_result/SAMPLE/logs directory"
+
+    for (( i=1; i<= $numTP; i++))
+    do
+	for grp in control treatment
+	do 
+	   eval con='$'${grp}${i}
+	   IFS=',' array=($con)
+	   for elem in "${array[@]}"
+	   do
+	      eval con2='$'$elem'Path'
+	      sampleArray[$elem]=$con2
+	   done
+	done
+
+    done
+    # Now runs tophat
+    for elem in ${!sampleArray[@]}
+    do
+	  runtophat $elem ${sampleArray[$elem]} $nthreads
+    done
+
 fi
 
-if [ "$cuffdiff" == "no" ] && [ "$cuff" == 0 ]; then
-echo $'\n'
-echo "### Cufflinks : Estimating gene expression values ###"	
-echo "Log will be written in cufflinks_result/SAMPLE/log.txt"
+if [ "$usecuffdiff" == "yes" ] && [ "$runcufflinks" == 1 ]; then
+    echo $'\n'
+    echo "### Cufflinks : Estimating gene expression values ###"	
+    echo "Log will be written in cufflinks_result/SAMPLE/log.txt"
 
-for i in $(eval echo "{1..$numTP}")
-do
-   eval con='$control'$i
-   IFS=',' array=($con)
-   for elem in "${array[@]}"
-   do
-      echo $'\n'
-      echo "Start Cufflinks for ${elem}"
-      echo "${cuffPath}cufflinks -o cufflinks_result/${elem} -G $gffPath tophat_result/${elem}/accepted_hits.bam"; eval "${cuffPath}cufflinks -o ${current}/cufflinks_result/${elem} -G $gffPath ${current}/tophat_result/${elem}/accepted_hits.bam 2>&1 | tee ${current}/cufflinks_result/${elem}/log.txt"
-   done
+    for elem in ${!sampleArray[@]}
+    do
+	  runcufflinks $elem $nthreads
+    done
 
-   eval tre='$treatment'$i
-   IFS=',' array=($tre)
-   for elem in "${array[@]}"
-   do
-      echo $'\n'
-      echo "Start Cufflinks for ${elem}"
-      echo "${cuffPath}cufflinks -o cufflinks_result/${elem} -G $gffPath tophat_result/${elem}/accepted_hits.bam"; eval "${cuffPath}cufflinks -o ${current}/cufflinks_result/${elem} -G $gffPath ${current}/tophat_result/${elem}/accepted_hits.bam 2>&1 | tee ${current}/cufflinks_result/${elem}/log.txt"
-   done
-done
+
 fi
 
-if [ "$cuffdiff" == "yes" ] && [ "$cuffd" == 0 ]; then
-echo "### Cuffdiff : Estimating gene expression values and finding DEGs###"
-echo "Log will be written in cuffdiff_result/SAMPLE/log.txt"
+if [ "$usecuffdiff" == "yes" ] && [ "$runcuffd" == 1 ]; then
+    echo "### Cuffdiff : Estimating gene expression values and finding DEGs###"
+    echo "Log will be written in cuffdiff_result/SAMPLE/log.txt"
 
-echo "Start Cuffcompare for making combined gtf file"
-eval "${cuffPath}cuffcompare -o ${current}/cuffdiff_result/ -CG -r ${gffPath} ${gffPath} 2>&1 | tee ${current}/cuffdiff_result/log_cuffcompare.txt"
+    echo "Start Cuffcompare for making combined gtf file"
+    cd ${current}/cuffdiff_result
+    eval "${cuffPath}cuffcompare -CG -r ${gffPath} ${gffPath} 2>&1 | tee log_cuffcompare.txt"
+    cd ..
 
-for i in $(eval echo "{1..$numTP}")
-do
-   eval diff='$diff'$i
-   eval con='$control'$i
-   conCuff=""
-   IFS=',' array=($con)
-   for elem in "${array[@]}"
-   do
-	conCuff=${conCuff}${current}'/tophat_result/'${elem}'/accepted_hits.bam,'
-   done
-   conCuff=${conCuff/%,/}
-   eval tre='$treatment'$i
-   treCuff=""
-   IFS=',' array=($tre)
-   for elem in "${array[@]}"
-   do
-        treCuff=${treCuff}${current}'/tophat_result/'${elem}'/accepted_hits.bam,'
-   done
-   treCuff=${treCuff/%,/}
-   echo $'\n'
-   echo "Start Cuffdiff for control${i} and treatment${i}"
-   echo "${cuffPath}cuffdiff -o cuffdiff_result/${diff} ${current}/cuffdiff_result/cuffcmp.combined.gtf ${conCuff} ${treCuff}"; eval "${cuffPath}cuffdiff -o cuffdiff_result/${diff} ${current}/cuffdiff_result/cuffcmp.combined.gtf ${conCuff} ${treCuff} 2>&1 | tee ${current}/cuffdiff_result/${diff}/log.txt"
-done
+    for ((i=1; i<=$numTP; i++))
+    do
+       eval diff='$diff'$i
+       eval con='$control'$i
+       conCuff=""
+       IFS=',' array=($con)
+       for elem in "${array[@]}"
+       do
+	    conCuff=${conCuff}${current}'/tophat_result/'${elem}'/accepted_hits.bam,'
+       done
+       conCuff=${conCuff/%,/}
+       eval tre='$treatment'$i
+       treCuff=""
+       IFS=',' array=($tre)
+       for elem in "${array[@]}"
+       do
+	    treCuff=${treCuff}${current}'/tophat_result/'${elem}'/accepted_hits.bam,'
+       done
+       treCuff=${treCuff/%,/}
+       echo $'\n'
+       echo "Start Cuffdiff for control${i} and treatment${i}"
+       echo "${cuffPath}cuffdiff -p 26 -o cuffdiff_result/${diff} ${current}/cuffdiff_result/cuffcmp.combined.gtf ${conCuff} ${treCuff}";
+       mkdir -p cuffdiff_result/${diff}
+       eval "${cuffPath}cuffdiff -p 26 -o cuffdiff_result/${diff} ${current}/cuffdiff_result/cuffcmp.combined.gtf ${conCuff} ${treCuff} 2>&1 | tee ${current}/cuffdiff_result/${diff}/log.txt"
+    done
 fi
 
 python TRAP.py
-

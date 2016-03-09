@@ -20,8 +20,12 @@ pnamePath=/PATH_TO_TRAP/TRAP/oryza_sativa/kegg_osa_pathwayname.txt
 # 5. KGML file path			(Provided for rice)
 kgmlPath=/PATH_TO_TRAP/osa_kgml
 
-# 6. Use of Cufflinks/Cuffdiff result
-cuffdiff=no
+# 6. Use of Cufflinks/Cuffdiff or GFOLD result
+useCuffdiff=no
+useGfold=no
+cuffDir="cufflinks_result"
+outdiffDir="gfold_result"
+resultDir="TRAP_result"
 
 # 6-1. Cuffdiff p-value cutoff and directory names 	(Write only if you
 # answered yes to 6)
@@ -34,12 +38,24 @@ diff3=CON3_TRE3
 # answered no in 6)
 DEGCut=2.0
 
+# 6-3. No need to change two following lines if you do not know what they are
+# 0-based column number for gene names
+# 2 for cuffdiff , 1 for GFOLD
+geneSymColNum=1 
+# fold change column number: 9 for cuffdiff, 2 (gfold) or 4 (log2fdc) for GFOLD
+fcColNum=9
+# pvalue or EFDR column number: 12 for cuffdiff and 3 for GFOLD
+pvalColNum=12
+
+
 # 7. Clustering cutoff & Time-lag factor
 clusterCut=2.0
 timeLag=1.0
 
 # Tophat software path 			(optional for Tophat)
 tophatPath=/PATH_TO_TOPHAT/
+# Number of threads to run tophat and cufflinks
+nthreads=12
 
 # Cufflinks software path 		(optional for Cufflinks and Cuffdiff)
 cuffPath=/PATH_TO_CUFFLINKS/
@@ -57,6 +73,10 @@ TRE31Path=/PATH_TO_THE_FILE/treatment31_1.fq,/PATH_TO_THE_FILE/treatment31_2.fq
 TRE12Path=/PATH_TO_THE_FILE/treatment12_1.fq,/PATH_TO_THE_FILE/treatment12_2.fq
 TRE22Path=/PATH_TO_THE_FILE/treatment22_1.fq,/PATH_TO_THE_FILE/treatment22_2.fq
 TRE32Path=/PATH_TO_THE_FILE/treatment32_1.fq,/PATH_TO_THE_FILE/treatment32_2.fq
+
+# Information for BAM file read group
+rgPlatform="Proton Data"
+rgCenter="AfMD"
 
 # Reference genome index path 	(optional for Tophat)
 # FILE_NAME should be without filename extension
